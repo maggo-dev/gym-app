@@ -1,11 +1,15 @@
 import { motion } from 'framer-motion'
-import { CalendarCheck, Flame, Ruler, Scale, Target, Timer } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Beef, CalendarCheck, ChevronRight, Droplets, Flame, Target } from 'lucide-react'
 import { useActiveProfile } from '@/store/useAppStore'
-import { firstName, formatHeight, goalLabels } from '@/lib/labels'
+import { useProfileMetrics } from '@/hooks/useProfileMetrics'
+import { fmt } from '@/lib/format'
+import { firstName, goalLabels } from '@/lib/labels'
 import { Badge, Button, Card, ProgressBar, StatTile } from '@/components/ui'
 
 export function HomePage() {
   const profile = useActiveProfile()
+  const metrics = useProfileMetrics()
 
   return (
     <motion.div
@@ -19,19 +23,30 @@ export function HomePage() {
         <h1 className="text-3xl font-extrabold">Olá, {firstName(profile.name)} 👋</h1>
       </section>
 
-      {/* Resumo do perfil */}
+      {/* Metas diárias */}
       <Card>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-bold">Seu perfil</h2>
+          <h2 className="font-bold">Metas de hoje</h2>
           <Badge tone="primary">
             <Target className="size-3.5" /> {goalLabels[profile.goal]}
           </Badge>
         </div>
         <div className="grid grid-cols-3 gap-2">
-          <StatTile icon={Scale} value={`${profile.weightKg} kg`} label="Peso" />
-          <StatTile icon={Ruler} value={formatHeight(profile.heightCm)} label="Altura" />
-          <StatTile icon={Timer} value={`${profile.maxSessionMinutes} min`} label="Máx./treino" tone="xp" />
+          <StatTile icon={Flame} value={fmt(metrics.calorieTarget)} label="kcal" tone="streak" />
+          <StatTile icon={Beef} value={`${metrics.macros.proteinG} g`} label="Proteína" />
+          <StatTile
+            icon={Droplets}
+            value={`${fmt(metrics.waterLitersTrainingDay, 1)} L`}
+            label="Água (treino)"
+            tone="xp"
+          />
         </div>
+        <Link
+          to="/perfil"
+          className="mt-3 flex items-center justify-end gap-1 text-sm font-semibold text-primary"
+        >
+          Ver detalhes <ChevronRight className="size-4" />
+        </Link>
       </Card>
 
       {/* Meta semanal (placeholder até a Etapa 5) */}
