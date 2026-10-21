@@ -1,0 +1,60 @@
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/inter/700.css';
+@import '@fontsource/inter/800.css';
+@import 'tailwindcss';
+
+/* ===== Design tokens — tema escuro "premium de academia" ===== */
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+
+  /* Superfícies */
+  --color-base: #0b0f14;
+  --color-surface: #121821;
+  --color-elevated: #1a2230;
+  --color-border: #243044;
+
+  /* Marca / estados */
+  --color-primary: #22c55e;
+  --color-primary-strong: #16a34a;
+  --color-streak: #f97316;
+  --color-xp: #facc15;
+  --color-danger: #ef4444;
+
+  /* Texto */
+  --color-fg: #f1f5f9;
+  --color-muted: #94a3b8;
+
+  --radius-card: 16px;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-base text-fg font-sans antialiased;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: none;
+  }
+
+  button {
+    @apply cursor-pointer select-none;
+  }
+
+  /* Números alinhados (cargas, timers, kcal) */
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
