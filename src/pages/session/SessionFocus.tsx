@@ -5,6 +5,7 @@ import {
   Check,
   ChevronDown,
   Clock,
+  Flame,
   Info,
   ListOrdered,
   Minus,
@@ -19,11 +20,14 @@ import { Badge, Button, Card, ProgressBar } from '@/components/ui'
 import { RestTimer, playBeep } from '@/components/workout/RestTimer'
 import { equipmentLabels, getExercise, muscleLabels } from '@/data/exercises'
 import { cn } from '@/lib/cn'
+import { shouldSuggestLoadIncrease } from '@/lib/gamification'
+import { useAppStore } from '@/store/useAppStore'
 import { sessionStats, useSessionStore } from '@/store/useSessionStore'
 
 export function SessionFocusPage() {
   const navigate = useNavigate()
   const session = useSessionStore((s) => s.session)
+  const history = useAppStore((s) => s.history)
   const selectExercise = useSessionStore((s) => s.selectExercise)
   const updateSet = useSessionStore((s) => s.updateSet)
   const completeSet = useSessionStore((s) => s.completeSet)
@@ -50,6 +54,12 @@ export function SessionFocusPage() {
   const isCardio = ex.kind === 'cardio'
   const stats = sessionStats(session)
   const progress = stats.totalSets > 0 ? stats.completedSets / stats.totalSets : 0
+  const overload = shouldSuggestLoadIncrease(
+    log.exerciseId,
+    history,
+    session.profileId,
+    log.repsMax,
+  )
 
   const activeSetIdx = log.sets.findIndex((st) => !st.done)
   const allSetsDone = activeSetIdx === -1
@@ -125,6 +135,15 @@ export function SessionFocusPage() {
               ? `Meta: ${Math.round((log.durationSec ?? 720) / 60)} minutos em ritmo constante`
               : `Meta: ${log.sets.length} séries de ${log.repsMin} a ${log.repsMax} repetições · Descanso ${log.restSec}s`}
           </p>
+          {overload.suggest && (
+            <div className="mt-2 flex items-center gap-2 rounded-xl border border-streak/40 bg-streak/15 px-3 py-2 text-xs font-semibold text-streak">
+              <Flame className="size-4 shrink-0 fill-current" />
+              <span>
+                Hora de subir carga (+2 kg)! No último treino você fechou todas as séries no topo com{' '}
+                {overload.lastWeightKg} kg.
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Dicas de execução colapsáveis */}
