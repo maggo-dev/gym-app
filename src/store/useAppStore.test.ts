@@ -11,6 +11,7 @@ describe('useAppStore', () => {
       nextDayIndex: {},
       history: [],
       dietLogs: {},
+      weightLogs: {},
     })
   })
 
@@ -73,5 +74,21 @@ describe('useAppStore', () => {
     expect(log.waterMl).toBe(500)
     expect(log.completedMeals).toEqual(['breakfast'])
     expect(log.swaps['lunch:carb1']).toEqual({ foodId: 'batata_doce', grams: 250 })
+  })
+
+  it('registra peso corporal e exporta/importa backup JSON completo', () => {
+    const s = useAppStore.getState()
+    s.logBodyWeight('mateus', 104.5, '2026-10-22')
+    s.setActiveProfile('helen')
+
+    const backup = useAppStore.getState().exportBackupJson()
+    useAppStore.setState({ activeProfileId: 'mateus', weightLogs: {} })
+
+    const res = useAppStore.getState().importBackupJson(backup)
+    expect(res.ok).toBe(true)
+    expect(useAppStore.getState().activeProfileId).toBe('helen')
+    expect(useAppStore.getState().weightLogs.mateus).toEqual([
+      { dateKey: '2026-10-22', weightKg: 104.5 },
+    ])
   })
 })

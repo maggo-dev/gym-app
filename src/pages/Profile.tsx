@@ -1,11 +1,33 @@
+import { useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Droplets, Flame, Gauge, PieChart, TriangleAlert } from 'lucide-react'
+import {
+  Download,
+  Droplets,
+  Flame,
+  Gauge,
+  History,
+  PieChart,
+  Scale,
+  TrendingUp,
+  TriangleAlert,
+  Upload,
+} from 'lucide-react'
 import { Avatar } from '@/components/layout/Avatar'
-import { Badge, Card } from '@/components/ui'
-import { useActiveProfile } from '@/store/useAppStore'
+import { Badge, Button, Card, MiniLineChart } from '@/components/ui'
+import { defaultProfiles } from '@/data/profiles'
+import { getExercise } from '@/data/exercises'
+import { todayDateKey, useActiveProfile, useAppStore } from '@/store/useAppStore'
 import { useProfileMetrics } from '@/hooks/useProfileMetrics'
+import {
+  bodyWeightSeries,
+  exerciseProgressionSeries,
+  loggedExercisesForProfile,
+  sessionTonnageSeries,
+  shortDateLabel,
+} from '@/lib/analytics'
 import { bmiCategoryLabels } from '@/lib/calculations'
 import { fmt } from '@/lib/format'
+import { calculateSessionXp } from '@/lib/gamification'
 import { experienceLabels, formatHeight, genderLabels, goalLabels } from '@/lib/labels'
 
 // Régua do IMC: 15 → 40
@@ -23,10 +45,61 @@ export function ProfilePage() {
   const p = useActiveProfile()
   const m = useProfileMetrics()
 
+  const history = useAppStore((s) => s.history)
+  const weightEntries = useAppStore((s) => s.weightLogs[p.id]) ?? []
+  const logBodyWeight = useAppStore((s) => s.logBodyWeight)
+  const exportBackupJson = useAppStore((s) => s.exportBackupJson)
+  const importBackupJson = useAppStore((s) => s.importBackupJson)
+
+  const initialProfile = defaultProfiles.find((dp) => dp.id === p.id) ?? p
+  const [weightInput, setWeightInput] = useState<string>(() => p.weightKg.toString())
+  const [selectedExId, setSelectedExId] = useState<string>('')
+  const [backupMessage, setBackupMessage] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+
+  const wSeries = bodyWeightSeries(initialProfile.weightKg, weightEntries)
+  const tonnageSeries = sessionTonnageSeries(history, p.id)
+  const loggedExIds = loggedExercisesForProfile(history, p.id)
+  const activeExId = selectedExId && loggedExIds.includes(selectedExId) ? selectedExId : (loggedExIds[0] ?? '')
+  const exProg = activeExId ? exerciseProgressionSeries(history, p.id, activeExId) : []
+
+  const profileSessions = history.filter((s) => s.profileId === p.id).slice(0, 6)
+
+  const handleSaveWeight = () => {
+    const val = parseFloat(weightInput.replace(',', '.'))
+    if (!Number.isNaN(val) && val > 20 && val < 300) {
+      logBodyWeight(p.id, val)
+    }
+  }
+
+  const handleExportBackup = () => {
+    const json = exportBackupJson()
+    const blob = new Blob([json], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `gymapp-backup-${todayDateKey()}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+    setBackupMessage('Backup exportado com sucesso!')
+  }
+
+  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const res = importBackupJson(String(reader.result ?? ''))
+      setBackupMessage(res.ok ? 'Backup restaurado com sucesso!' : (res.error ?? 'Erro ao importar.'))
+    }
+    reader.readAsText(file)
+    e.target.value = ''
+  }
+
   const rows: [string, string][] = [
     ['Gênero', genderLabels[p.gender]],
     ['Idade', `${p.age} anos`],
-    ['Peso', `${p.weightKg} kg`],
+    ['Peso atual', `${fmt(p.weightKg, 1)} kg (início: ${initialProfile.weightKg} kg)`],
     ['Altura', formatHeight(p.heightCm)],
     ['Objetivo', goalLabels[p.goal]],
     ['Experiência', experienceLabels[p.experience]],
@@ -58,6 +131,114 @@ export function ProfilePage() {
           <p className="text-muted">{goalLabels[p.goal]}</p>
         </div>
       </div>
+
+      {/* Evolução de Peso Corporal */}
+      <Card>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="flex items-center gap-2 font-bold">
+            <Scale className="size-5 text-primary" /> Evolução de Peso Corporal
+          </h2>
+          <Badge tone="primary">
+            {fmt(p.weightKg, 1)} kg
+          </Badge>
+        </div>
+
+        <MiniLineChart
+          data={wSeries.map((pt) => ({ label: pt.dateLabel, value: pt.weightKg }))}
+          unit="kg"
+          color="var(--color-primary)"
+        />
+
+        <div className="mt-3 flex items-center gap-2">
+          <input
+            type="number"
+            inputMode="decimal"
+            step="0.1"
+            value={weightInput}
+            onChange={(e) => setWeightInput(e.target.value)}
+            placeholder="Novo peso (kg)"
+            aria-label="Registrar peso corporal de hoje em kg"
+            className="num h-12 flex-1 rounded-xl border border-border bg-elevated px-3 text-sm font-bold text-fg focus:border-primary focus:outline-none"
+          />
+          <Button size="md" onClick={handleSaveWeight}>
+            Registrar hoje
+          </Button>
+        </div>
+        <p className="mt-1.5 text-[11px] text-muted">
+          Ao atualizar seu peso, todas as metas de calorias, macros e água se recalibram automaticamente.
+        </p>
+      </Card>
+
+      {/* Evolução de Volume e Cargas */}
+      <Card>
+        <h2 className="mb-2 flex items-center gap-2 font-bold">
+          <TrendingUp className="size-5 text-streak" /> Evolução nos Treinos
+        </h2>
+
+        <p className="mb-1.5 text-xs font-semibold text-muted">
+          Volume total levantado por sessão (kg)
+        </p>
+        <MiniLineChart
+          data={tonnageSeries.map((pt) => ({
+            label: `${pt.dayId} (${pt.dateLabel})`,
+            value: pt.tonnageKg,
+          }))}
+          unit="kg"
+          color="var(--color-streak)"
+        />
+
+        {loggedExIds.length > 0 && (
+          <div className="mt-4">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-muted">Carga máxima por exercício:</span>
+              <select
+                value={activeExId}
+                onChange={(e) => setSelectedExId(e.target.value)}
+                aria-label="Selecionar exercício para ver evolução"
+                className="max-w-[200px] truncate rounded-xl border border-border bg-elevated px-2.5 py-1.5 text-xs font-semibold text-fg"
+              >
+                {loggedExIds.map((id) => (
+                  <option key={id} value={id}>
+                    {getExercise(id).name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <MiniLineChart
+              data={exProg.map((pt) => ({ label: pt.dateLabel, value: pt.maxWeightKg }))}
+              unit="kg"
+              color="var(--color-xp)"
+            />
+          </div>
+        )}
+      </Card>
+
+      {/* Histórico Recente de Sessões */}
+      {profileSessions.length > 0 && (
+        <Card>
+          <h2 className="mb-2 flex items-center gap-2 font-bold">
+            <History className="size-5 text-xp" /> Últimos Treinos Concluídos
+          </h2>
+          <ul className="divide-y divide-border text-sm">
+            {profileSessions.map((s) => {
+              const xp = calculateSessionXp(s).totalXp
+              return (
+                <li key={s.id} className="flex items-center justify-between py-2.5">
+                  <div>
+                    <p className="font-semibold">
+                      {s.dayName} · {s.dayFocus}
+                    </p>
+                    <p className="num text-xs text-muted">
+                      {shortDateLabel(s.startedAt)} · {Object.keys(s.logs).length} exercícios
+                    </p>
+                  </div>
+                  <Badge tone="xp">+{xp} XP</Badge>
+                </li>
+              )
+            })}
+          </ul>
+        </Card>
+      )}
 
       {/* Gasto energético */}
       <Card>
@@ -181,6 +362,37 @@ export function ProfilePage() {
             </div>
           ))}
         </dl>
+      </Card>
+
+      {/* Backup Exportar / Importar */}
+      <Card>
+        <h2 className="mb-1 font-bold">Backup dos Dados</h2>
+        <p className="mb-3 text-xs text-muted">
+          Seus treinos, cargas, peso e dieta ficam salvos neste aparelho. Baixe uma cópia para
+          guardar ou transferir para outro celular.
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant="secondary" size="md" onClick={handleExportBackup}>
+            <Download className="size-4 text-primary" /> Exportar JSON
+          </Button>
+          <Button
+            variant="secondary"
+            size="md"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <Upload className="size-4 text-xp" /> Importar JSON
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json,.json"
+            onChange={handleImportFile}
+            className="hidden"
+          />
+        </div>
+        {backupMessage && (
+          <p className="mt-2 text-center text-xs font-semibold text-primary">{backupMessage}</p>
+        )}
       </Card>
 
       <p className="flex items-start gap-2 px-1 text-xs text-muted">

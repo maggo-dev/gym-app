@@ -201,3 +201,10 @@ export interface DailyDietLog {
   /** Substituições feitas no dia: chave = `${mealId}:${slotKey}` */
   swaps: Record<string, { foodId: string; grams: number }>
 }
+
+// ===== Evolução de Peso & Backup =====
+
+export interface BodyWeightEntry {
+  dateKey: string
+  weightKg: number
+}

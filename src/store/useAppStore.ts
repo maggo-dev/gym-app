@@ -3,10 +3,17 @@ import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { defaultProfiles } from '@/data/profiles'
 import { GENERATOR_VERSION, generatePlan } from '@/lib/workoutGenerator'
-import type { DailyDietLog, MealSlotId, UserProfile, WorkoutPlan, WorkoutSession } from '@/types'
+import type {
+  BodyWeightEntry,
+  DailyDietLog,
+  MealSlotId,
+  UserProfile,
+  WorkoutPlan,
+  WorkoutSession,
+} from '@/types'
 
 export const STORE_KEY = 'gymapp:v1'
-export const STORE_VERSION = 4
+export const STORE_VERSION = 5
 
 export function todayDateKey(d: Date = new Date()): string {
   const y = d.getFullYear()
@@ -35,6 +42,8 @@ export interface AppState {
   history: WorkoutSession[]
   /** registros diários de dieta e água: chave = `${profileId}:${dateKey}` */
   dietLogs: Record<string, DailyDietLog>
+  /** evolução de peso corporal por perfil */
+  weightLogs: Record<string, BodyWeightEntry[]>
 
   setActiveProfile: (id: string) => void
   ensurePlan: (profileId: string) => WorkoutPlan
@@ -53,11 +62,15 @@ export interface AppState {
     grams: number,
   ) => void
   resetMealSwaps: (profileId: string, dateKey: string) => void
+
+  logBodyWeight: (profileId: string, weightKg: number, dateKey?: string) => void
+  exportBackupJson: () => string
+  importBackupJson: (jsonStr: string) => { ok: boolean; error?: string }
 }
 
 type PersistedState = Pick<
   AppState,
-  'activeProfileId' | 'plans' | 'nextDayIndex' | 'history' | 'dietLogs'
+  'activeProfileId' | 'plans' | 'nextDayIndex' | 'history' | 'dietLogs' | 'weightLogs'
 >
 
 const isPlanValid = (plan: WorkoutPlan | undefined, profile: UserProfile) =>
@@ -72,6 +85,7 @@ export const useAppStore = create<AppState>()(
       nextDayIndex: {},
       history: [],
       dietLogs: {},
+      weightLogs: {},
 
       setActiveProfile: (id) => {
         if (get().profiles.some((p) => p.id === id)) set({ activeProfileId: id })
@@ -181,6 +195,69 @@ export const useAppStore = create<AppState>()(
             },
           }
         }),
+
+      logBodyWeight: (profileId, weightKg, dateKey = todayDateKey()) =>
+        set((s) => {
+          if (weightKg <= 20 || weightKg >= 300) return s
+          const rounded = Math.round(weightKg * 10) / 10
+          const list = [...(s.weightLogs[profileId] ?? [])]
+          const existingIdx = list.findIndex((e) => e.dateKey === dateKey)
+          if (existingIdx >= 0) {
+            list[existingIdx] = { dateKey, weightKg: rounded }
+          } else {
+            list.push({ dateKey, weightKg: rounded })
+          }
+          list.sort((a, b) => a.dateKey.localeCompare(b.dateKey))
+          return {
+            weightLogs: {
+              ...s.weightLogs,
+              [profileId]: list,
+            },
+          }
+        }),
+
+      exportBackupJson: () => {
+        const s = get()
+        return JSON.stringify(
+          {
+            app: 'gym-app',
+            version: STORE_VERSION,
+            exportedAt: new Date().toISOString(),
+            data: {
+              activeProfileId: s.activeProfileId,
+              plans: s.plans,
+              nextDayIndex: s.nextDayIndex,
+              history: s.history,
+              dietLogs: s.dietLogs,
+              weightLogs: s.weightLogs,
+            },
+          },
+          null,
+          2,
+        )
+      },
+
+      importBackupJson: (jsonStr) => {
+        try {
+          const parsed = JSON.parse(jsonStr)
+          const d = parsed?.data
+          if (!d || typeof d !== 'object') {
+            return { ok: false, error: 'Formato de arquivo inválido.' }
+          }
+          set({
+            activeProfileId:
+              typeof d.activeProfileId === 'string' ? d.activeProfileId : defaultProfiles[0].id,
+            plans: d.plans && typeof d.plans === 'object' ? d.plans : {},
+            nextDayIndex: d.nextDayIndex && typeof d.nextDayIndex === 'object' ? d.nextDayIndex : {},
+            history: Array.isArray(d.history) ? d.history : [],
+            dietLogs: d.dietLogs && typeof d.dietLogs === 'object' ? d.dietLogs : {},
+            weightLogs: d.weightLogs && typeof d.weightLogs === 'object' ? d.weightLogs : {},
+          })
+          return { ok: true }
+        } catch {
+          return { ok: false, error: 'Não foi possível ler o JSON de backup.' }
+        }
+      },
     }),
     {
       name: STORE_KEY,
@@ -193,6 +270,7 @@ export const useAppStore = create<AppState>()(
         nextDayIndex: s.nextDayIndex,
         history: s.history,
         dietLogs: s.dietLogs,
+        weightLogs: s.weightLogs,
       }),
       migrate: (persisted, version) => {
         const state = (persisted ?? {}) as Partial<PersistedState>
@@ -202,15 +280,30 @@ export const useAppStore = create<AppState>()(
           nextDayIndex: version >= 2 ? (state.nextDayIndex ?? {}) : {},
           history: version >= 3 ? (state.history ?? []) : [],
           dietLogs: version >= 4 ? (state.dietLogs ?? {}) : {},
+          weightLogs: version >= 5 ? (state.weightLogs ?? {}) : {},
         }
       },
     },
   ),
 )
 
-/** Perfil ativo (sempre definido). */
-export const useActiveProfile = () =>
-  useAppStore((s) => s.profiles.find((p) => p.id === s.activeProfileId) ?? s.profiles[0])
+/**
+ * Perfil ativo (sempre definido).
+ * Se o usuário já registrou um peso corporal recente, atualiza dinamicamente o `weightKg`
+ * para que IMC, calorias, macros e água acompanhem a evolução real!
+ */
+export function useActiveProfile(): UserProfile {
+  const base = useAppStore(
+    (s) => s.profiles.find((p) => p.id === s.activeProfileId) ?? s.profiles[0],
+  )
+  const weights = useAppStore((s) => s.weightLogs[base.id])
+  const latestWeight = weights && weights.length > 0 ? weights[weights.length - 1].weightKg : null
+
+  return useMemo(
+    () => (latestWeight ? { ...base, weightKg: latestWeight } : base),
+    [base, latestWeight],
+  )
+}
 
 /**
  * Ficha do perfil ativo. Se não existir (ou estiver desatualizada),
