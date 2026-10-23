@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
-import { Beef, CalendarCheck, ChevronRight, Droplets, Flame, Target } from 'lucide-react'
-import { useActiveProfile } from '@/store/useAppStore'
+import { Beef, CalendarCheck, ChevronRight, Clock, Droplets, Dumbbell, Flame, Target } from 'lucide-react'
+import { useActiveProfile, useNextWorkoutDay } from '@/store/useAppStore'
 import { useProfileMetrics } from '@/hooks/useProfileMetrics'
 import { fmt } from '@/lib/format'
 import { firstName, goalLabels } from '@/lib/labels'
@@ -10,6 +10,7 @@ import { Badge, Button, Card, ProgressBar, StatTile } from '@/components/ui'
 export function HomePage() {
   const profile = useActiveProfile()
   const metrics = useProfileMetrics()
+  const { day: nextDay } = useNextWorkoutDay()
 
   return (
     <motion.div
@@ -63,17 +64,30 @@ export function HomePage() {
         </p>
       </Card>
 
-      {/* Treino do dia (placeholder até a Etapa 4) */}
+      {/* Treino do dia */}
       <Card elevated>
-        <div className="mb-3 flex items-center gap-2">
-          <CalendarCheck className="size-5 text-primary" />
-          <h2 className="font-bold">Treino de hoje</h2>
+        <div className="mb-1 flex items-center justify-between">
+          <h2 className="flex items-center gap-2 font-bold">
+            <CalendarCheck className="size-5 text-primary" /> Treino de hoje
+          </h2>
+          <span className="flex size-10 items-center justify-center rounded-xl bg-primary text-xl font-extrabold text-base">
+            {nextDay.id}
+          </span>
         </div>
-        <p className="mb-4 text-sm text-muted">
-          As fichas personalizadas chegam na Etapa 3. Por enquanto, este é só o espaço reservado.
-        </p>
+        <p className="mb-3 text-lg font-semibold">{nextDay.focus}</p>
+        <div className="mb-4 flex flex-wrap gap-2">
+          <Badge>
+            <Clock className="size-3.5" /> ~{nextDay.estimatedMinutes} min
+          </Badge>
+          <Badge>
+            <Dumbbell className="size-3.5" /> {nextDay.exercises.length} exercícios
+          </Badge>
+          <Link to="/treino" className="ml-auto text-sm font-semibold text-primary">
+            Ver ficha
+          </Link>
+        </div>
         <Button fullWidth disabled>
-          Iniciar treino
+          Iniciar treino · Etapa 4
         </Button>
       </Card>
     </motion.div>
