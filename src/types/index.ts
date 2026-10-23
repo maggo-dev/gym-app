@@ -157,3 +157,47 @@ export interface WorkoutSession {
   currentId: string | null
   logs: Record<string, ExerciseLog>
 }
+
+// ===== Dieta & Nutrição =====
+
+export type FoodCategory = 'protein' | 'carb' | 'fat' | 'fruit_veg' | 'comfort'
+
+export interface FoodItem {
+  id: string
+  name: string
+  category: FoodCategory
+  /** Rótulo da porção/estado (ex: 'cozido', 'grelhado', '1 unid. ≈ 50g') */
+  portionHint: string
+  /** Gramas por unidade caseira opcional (ex: 1 ovo = 50g, 1 fatia pão = 25g) */
+  gramsPerUnit?: number
+  unitName?: string
+  per100g: {
+    kcal: number
+    proteinG: number
+    carbsG: number
+    fatG: number
+  }
+}
+
+export type MealSlotId = 'breakfast' | 'lunch' | 'snack' | 'dinner'
+
+export interface PlannedMealItem {
+  slotKey: string
+  foodId: string
+  grams: number
+}
+
+export interface PlannedMeal {
+  id: MealSlotId
+  name: string
+  timeHint: string
+  items: PlannedMealItem[]
+}
+
+export interface DailyDietLog {
+  dateKey: string
+  completedMeals: MealSlotId[]
+  waterMl: number
+  /** Substituições feitas no dia: chave = `${mealId}:${slotKey}` */
+  swaps: Record<string, { foodId: string; grams: number }>
+}

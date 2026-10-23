@@ -5,7 +5,13 @@ import { STORE_KEY, STORE_VERSION, useAppStore } from './useAppStore'
 describe('useAppStore', () => {
   beforeEach(() => {
     localStorage.clear()
-    useAppStore.setState({ activeProfileId: 'mateus', plans: {}, nextDayIndex: {}, history: [] })
+    useAppStore.setState({
+      activeProfileId: 'mateus',
+      plans: {},
+      nextDayIndex: {},
+      history: [],
+      dietLogs: {},
+    })
   })
 
   it('carrega os dois perfis fixos', () => {
@@ -54,5 +60,18 @@ describe('useAppStore', () => {
     expect(s.plans).toEqual({})
     expect(s.nextDayIndex).toEqual({})
     expect(s.history).toEqual([])
+    expect(s.dietLogs).toEqual({})
+  })
+
+  it('registra água e conclusão de refeições na dieta do dia', () => {
+    const s = useAppStore.getState()
+    s.addWaterMl('mateus', '2026-10-22', 500)
+    s.toggleMealDone('mateus', '2026-10-22', 'breakfast')
+    s.swapMealItem('mateus', '2026-10-22', 'lunch', 'carb1', 'batata_doce', 250)
+
+    const log = useAppStore.getState().dietLogs['mateus:2026-10-22']
+    expect(log.waterMl).toBe(500)
+    expect(log.completedMeals).toEqual(['breakfast'])
+    expect(log.swaps['lunch:carb1']).toEqual({ foodId: 'batata_doce', grams: 250 })
   })
 })

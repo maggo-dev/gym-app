@@ -3,10 +3,26 @@ import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { defaultProfiles } from '@/data/profiles'
 import { GENERATOR_VERSION, generatePlan } from '@/lib/workoutGenerator'
-import type { UserProfile, WorkoutPlan, WorkoutSession } from '@/types'
+import type { DailyDietLog, MealSlotId, UserProfile, WorkoutPlan, WorkoutSession } from '@/types'
 
 export const STORE_KEY = 'gymapp:v1'
-export const STORE_VERSION = 3
+export const STORE_VERSION = 4
+
+export function todayDateKey(d: Date = new Date()): string {
+  const y = d.getFullYear()
+  const m = (d.getMonth() + 1).toString().padStart(2, '0')
+  const day = d.getDate().toString().padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+export function emptyDietLog(dateKey: string): DailyDietLog {
+  return {
+    dateKey,
+    completedMeals: [],
+    waterMl: 0,
+    swaps: {},
+  }
+}
 
 export interface AppState {
   profiles: UserProfile[]
@@ -17,15 +33,32 @@ export interface AppState {
   nextDayIndex: Record<string, number>
   /** histórico de sessões finalizadas */
   history: WorkoutSession[]
+  /** registros diários de dieta e água: chave = `${profileId}:${dateKey}` */
+  dietLogs: Record<string, DailyDietLog>
 
   setActiveProfile: (id: string) => void
   ensurePlan: (profileId: string) => WorkoutPlan
   regeneratePlan: (profileId: string, daysPerWeek?: number) => WorkoutPlan
   setNextDay: (profileId: string, index: number) => void
   recordSession: (session: WorkoutSession) => void
+
+  toggleMealDone: (profileId: string, dateKey: string, mealId: MealSlotId) => void
+  addWaterMl: (profileId: string, dateKey: string, deltaMl: number) => void
+  swapMealItem: (
+    profileId: string,
+    dateKey: string,
+    mealId: MealSlotId,
+    slotKey: string,
+    foodId: string,
+    grams: number,
+  ) => void
+  resetMealSwaps: (profileId: string, dateKey: string) => void
 }
 
-type PersistedState = Pick<AppState, 'activeProfileId' | 'plans' | 'nextDayIndex' | 'history'>
+type PersistedState = Pick<
+  AppState,
+  'activeProfileId' | 'plans' | 'nextDayIndex' | 'history' | 'dietLogs'
+>
 
 const isPlanValid = (plan: WorkoutPlan | undefined, profile: UserProfile) =>
   !!plan && plan.generatorVersion === GENERATOR_VERSION && plan.daysPerWeek === profile.daysPerWeek
@@ -38,6 +71,7 @@ export const useAppStore = create<AppState>()(
       plans: {},
       nextDayIndex: {},
       history: [],
+      dietLogs: {},
 
       setActiveProfile: (id) => {
         if (get().profiles.some((p) => p.id === id)) set({ activeProfileId: id })
@@ -85,6 +119,68 @@ export const useAppStore = create<AppState>()(
             },
           }
         }),
+
+      toggleMealDone: (profileId, dateKey, mealId) =>
+        set((s) => {
+          const key = `${profileId}:${dateKey}`
+          const current = s.dietLogs[key] ?? emptyDietLog(dateKey)
+          const exists = current.completedMeals.includes(mealId)
+          const completedMeals = exists
+            ? current.completedMeals.filter((id) => id !== mealId)
+            : [...current.completedMeals, mealId]
+          return {
+            dietLogs: {
+              ...s.dietLogs,
+              [key]: { ...current, completedMeals },
+            },
+          }
+        }),
+
+      addWaterMl: (profileId, dateKey, deltaMl) =>
+        set((s) => {
+          const key = `${profileId}:${dateKey}`
+          const current = s.dietLogs[key] ?? emptyDietLog(dateKey)
+          return {
+            dietLogs: {
+              ...s.dietLogs,
+              [key]: {
+                ...current,
+                waterMl: Math.max(0, current.waterMl + deltaMl),
+              },
+            },
+          }
+        }),
+
+      swapMealItem: (profileId, dateKey, mealId, slotKey, foodId, grams) =>
+        set((s) => {
+          const key = `${profileId}:${dateKey}`
+          const current = s.dietLogs[key] ?? emptyDietLog(dateKey)
+          return {
+            dietLogs: {
+              ...s.dietLogs,
+              [key]: {
+                ...current,
+                swaps: {
+                  ...current.swaps,
+                  [`${mealId}:${slotKey}`]: { foodId, grams },
+                },
+              },
+            },
+          }
+        }),
+
+      resetMealSwaps: (profileId, dateKey) =>
+        set((s) => {
+          const key = `${profileId}:${dateKey}`
+          const current = s.dietLogs[key]
+          if (!current) return s
+          return {
+            dietLogs: {
+              ...s.dietLogs,
+              [key]: { ...current, swaps: {} },
+            },
+          }
+        }),
     }),
     {
       name: STORE_KEY,
@@ -96,6 +192,7 @@ export const useAppStore = create<AppState>()(
         plans: s.plans,
         nextDayIndex: s.nextDayIndex,
         history: s.history,
+        dietLogs: s.dietLogs,
       }),
       migrate: (persisted, version) => {
         const state = (persisted ?? {}) as Partial<PersistedState>
@@ -104,6 +201,7 @@ export const useAppStore = create<AppState>()(
           plans: version >= 2 ? (state.plans ?? {}) : {},
           nextDayIndex: version >= 2 ? (state.nextDayIndex ?? {}) : {},
           history: version >= 3 ? (state.history ?? []) : [],
+          dietLogs: version >= 4 ? (state.dietLogs ?? {}) : {},
         }
       },
     },
