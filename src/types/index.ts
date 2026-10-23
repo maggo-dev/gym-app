@@ -113,3 +113,47 @@ export interface WorkoutPlan {
   generatorVersion: number
   generatedAt: string
 }
+
+// ===== Sessão de Treino Ativa & Histórico =====
+
+export type EnergyLevel = 'high' | 'normal' | 'low'
+
+export type ExerciseStatus = 'pending' | 'active' | 'done' | 'skipped'
+
+export interface SetLog {
+  reps: number
+  weightKg: number
+  done: boolean
+  completedAt?: string
+}
+
+export interface ExerciseLog {
+  /** id original planejado na ficha (chave em queue e logs) */
+  plannedExerciseId: string
+  /** id do exercício em execução (pode ter sido substituído por equivalente) */
+  exerciseId: string
+  substitutedFrom?: string
+  repsMin: number
+  repsMax: number
+  restSec: number
+  durationSec?: number
+  isStarter: boolean
+  sets: SetLog[]
+  status: ExerciseStatus
+}
+
+export interface WorkoutSession {
+  id: string
+  profileId: string
+  dayId: WorkoutDayId
+  dayName: string
+  dayFocus: string
+  energy: EnergyLevel
+  startedAt: string
+  finishedAt?: string
+  /** Ordem atual dos exercícios (chaves = plannedExerciseId) */
+  queue: string[]
+  /** Exercício atualmente em foco na tela */
+  currentId: string | null
+  logs: Record<string, ExerciseLog>
+}

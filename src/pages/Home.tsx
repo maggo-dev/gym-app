@@ -1,16 +1,46 @@
 import { motion } from 'framer-motion'
-import { Link } from 'react-router-dom'
-import { Beef, CalendarCheck, ChevronRight, Clock, Droplets, Dumbbell, Flame, Target } from 'lucide-react'
-import { useActiveProfile, useNextWorkoutDay } from '@/store/useAppStore'
+import { Link, useNavigate } from 'react-router-dom'
+import {
+  Beef,
+  CalendarCheck,
+  ChevronRight,
+  Clock,
+  Droplets,
+  Dumbbell,
+  Flame,
+  Play,
+  Target,
+} from 'lucide-react'
+import { useActiveProfile, useAppStore, useNextWorkoutDay } from '@/store/useAppStore'
+import { useSessionStore } from '@/store/useSessionStore'
 import { useProfileMetrics } from '@/hooks/useProfileMetrics'
 import { fmt } from '@/lib/format'
 import { firstName, goalLabels } from '@/lib/labels'
 import { Badge, Button, Card, ProgressBar, StatTile } from '@/components/ui'
 
 export function HomePage() {
+  const navigate = useNavigate()
   const profile = useActiveProfile()
   const metrics = useProfileMetrics()
   const { day: nextDay } = useNextWorkoutDay()
+  const activeSession = useSessionStore((s) => s.session)
+  const history = useAppStore((s) => s.history)
+
+  const hasActiveSessionForProfile = activeSession?.profileId === profile.id
+
+  // Conta treinos concluídos nos últimos 7 dias para o perfil ativo
+  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
+  const weeklyDoneCount = history.filter(
+    (h) => h.profileId === profile.id && new Date(h.startedAt).getTime() >= weekAgo,
+  ).length
+
+  const handleStartOrResume = () => {
+    if (hasActiveSessionForProfile) {
+      navigate('/treino/sessao/foco')
+    } else {
+      navigate('/treino/sessao/checkin')
+    }
+  }
 
   return (
     <motion.div
@@ -50,15 +80,17 @@ export function HomePage() {
         </Link>
       </Card>
 
-      {/* Meta semanal (placeholder até a Etapa 5) */}
+      {/* Meta semanal */}
       <Card>
         <div className="mb-2 flex items-center justify-between">
           <h2 className="flex items-center gap-2 font-bold">
             <Flame className="size-5 text-streak" /> Meta da semana
           </h2>
-          <span className="num text-sm text-muted">0 / {profile.targetDaysPerWeek} treinos</span>
+          <span className="num text-sm text-muted">
+            {weeklyDoneCount} / {profile.targetDaysPerWeek} treinos
+          </span>
         </div>
-        <ProgressBar value={0} color="streak" />
+        <ProgressBar value={weeklyDoneCount / profile.targetDaysPerWeek} color="streak" />
         <p className="mt-2 text-xs text-muted">
           Hoje você treina {profile.daysPerWeek}x por semana — meta: {profile.targetDaysPerWeek}x.
         </p>
@@ -68,13 +100,16 @@ export function HomePage() {
       <Card elevated>
         <div className="mb-1 flex items-center justify-between">
           <h2 className="flex items-center gap-2 font-bold">
-            <CalendarCheck className="size-5 text-primary" /> Treino de hoje
+            <CalendarCheck className="size-5 text-primary" />{' '}
+            {hasActiveSessionForProfile ? 'Treino em andamento' : 'Treino de hoje'}
           </h2>
           <span className="flex size-10 items-center justify-center rounded-xl bg-primary text-xl font-extrabold text-base">
-            {nextDay.id}
+            {hasActiveSessionForProfile ? activeSession.dayId : nextDay.id}
           </span>
         </div>
-        <p className="mb-3 text-lg font-semibold">{nextDay.focus}</p>
+        <p className="mb-3 text-lg font-semibold">
+          {hasActiveSessionForProfile ? activeSession.dayFocus : nextDay.focus}
+        </p>
         <div className="mb-4 flex flex-wrap gap-2">
           <Badge>
             <Clock className="size-3.5" /> ~{nextDay.estimatedMinutes} min
@@ -86,8 +121,11 @@ export function HomePage() {
             Ver ficha
           </Link>
         </div>
-        <Button fullWidth disabled>
-          Iniciar treino · Etapa 4
+        <Button fullWidth onClick={handleStartOrResume}>
+          <Play className="size-5 fill-current" />
+          {hasActiveSessionForProfile
+            ? `Continuar Treino ${activeSession.dayId}`
+            : `Iniciar Treino ${nextDay.id}`}
         </Button>
       </Card>
     </motion.div>

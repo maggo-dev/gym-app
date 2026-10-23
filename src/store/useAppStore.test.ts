@@ -5,7 +5,7 @@ import { STORE_KEY, STORE_VERSION, useAppStore } from './useAppStore'
 describe('useAppStore', () => {
   beforeEach(() => {
     localStorage.clear()
-    useAppStore.setState({ activeProfileId: 'mateus', plans: {}, nextDayIndex: {} })
+    useAppStore.setState({ activeProfileId: 'mateus', plans: {}, nextDayIndex: {}, history: [] })
   })
 
   it('carrega os dois perfis fixos', () => {
@@ -46,12 +46,13 @@ describe('useAppStore', () => {
     expect(useAppStore.getState().nextDayIndex.mateus).toBe(2)
   })
 
-  it('migra estado v1 para v2 preservando o perfil ativo', async () => {
+  it('migra estado v1 para v3 preservando o perfil ativo', async () => {
     localStorage.setItem(STORE_KEY, JSON.stringify({ state: { activeProfileId: 'helen' }, version: 1 }))
     await useAppStore.persist.rehydrate()
     const s = useAppStore.getState()
     expect(s.activeProfileId).toBe('helen')
     expect(s.plans).toEqual({})
     expect(s.nextDayIndex).toEqual({})
+    expect(s.history).toEqual([])
   })
 })

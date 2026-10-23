@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { BarChart3, Clock, Dumbbell, Layers, Star } from 'lucide-react'
-import { Badge, Card } from '@/components/ui'
+import { BarChart3, Clock, Dumbbell, Layers, Play, Star } from 'lucide-react'
+import { Badge, Button, Card } from '@/components/ui'
 import { ExerciseRow } from '@/components/workout/ExerciseRow'
 import { muscleLabels } from '@/data/exercises'
 import { cn } from '@/lib/cn'
 import { generatePlan, weeklySetsByMuscle } from '@/lib/workoutGenerator'
-import { useActivePlan, useActiveProfile } from '@/store/useAppStore'
+import { useActivePlan, useActiveProfile, useAppStore } from '@/store/useAppStore'
 import type { MuscleGroup } from '@/types'
 
 const VOLUME_ORDER: MuscleGroup[] = [
@@ -17,8 +18,10 @@ const VOLUME_MIN = 10
 const VOLUME_MAX = 20
 
 export function WorkoutPage() {
+  const navigate = useNavigate()
   const profile = useActiveProfile()
   const currentPlan = useActivePlan()
+  const setNextDay = useAppStore((s) => s.setNextDay)
   const [days, setDays] = useState<3 | 4>(3)
   const [dayIdx, setDayIdx] = useState(0)
 
@@ -91,6 +94,18 @@ export function WorkoutPage() {
             <Layers className="size-3.5" /> {totalSets} séries
           </Badge>
         </div>
+        {days === profile.daysPerWeek && (
+          <Button
+            fullWidth
+            className="mt-4"
+            onClick={() => {
+              setNextDay(profile.id, dayIdx)
+              navigate('/treino/sessao/checkin')
+            }}
+          >
+            <Play className="size-5 fill-current" /> Iniciar {day.name}
+          </Button>
+        )}
       </Card>
 
       <p className="-mb-2 flex items-center gap-1.5 text-xs text-muted">
